@@ -1,4 +1,6 @@
 import numpy as np
+import os
+import pickle
 import torch
 from torch import optim
 from torch.nn import functional
@@ -95,7 +97,8 @@ class CTGANSynthesizer(object):
 
         return (loss * m).sum() / data.size()[0]
 
-    def fit(self, train_data, discrete_columns=tuple(), epochs=300, log_frequency=True):
+    def fit(self, train_data, discrete_columns=tuple(), epochs=300, log_frequency=True, 
+            save_every=100, save_filename="./checkpoints/model"):
         """Fit the CTGAN Synthesizer models to the training data.
 
         Args:
@@ -112,6 +115,10 @@ class CTGANSynthesizer(object):
             log_frequency (boolean):
                 Whether to use log frequency of categorical levels in conditional
                 sampling. Defaults to ``True``.
+            save_every (int):
+                Save the model every x epochs. If save_every <= 0, no model will be saved.
+            save_filename (string):
+                Save the model in ./save_filename_<epoch>.obj
         """
 
         self.transformer = DataTransformer()
@@ -224,6 +231,17 @@ class CTGANSynthesizer(object):
             print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
                   (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
                   flush=True)
+            
+            if save_every > 0:
+                save_filename = os.path.abspath(save_filename)
+                save_filename_dir = os.path.dirname(save_filename)
+                if not os.path.isdir(save_filename_dir):
+                    os.makedirs(save_filename_dir)
+                loss_files = open(os.path.join(save_filename_dir, "losses.txt"), 'a+')
+                loss_files.writelines(f"{i+1}, {loss_g.detach().cpu():.8f}, {loss_d.detach().cpu():.8f}\n")
+                loss_files.close()
+                if (i+1) % save_every == 0:
+                    self.save(save_path="%s_%s.obj" % (save_filename, i+1))
 
     def sample(self, n):
         """Sample data similar to the training data.
@@ -259,3 +277,17 @@ class CTGANSynthesizer(object):
         data = data[:n]
 
         return self.transformer.inverse_transform(data, None)
+
+    def save(self, save_path="./default.obj"):
+        """Save class"""
+        myfile = open(save_path, 'wb')
+        pickle.dump(self.__dict__, myfile)
+        myfile.close()
+
+    def load(self, load_path="./default.obj"):
+        """load class"""
+        myfile = open(load_path, 'rb')
+        objPickle = pickle.load(myfile)
+        myfile.close()
+
+        self.__dict__ = objPickle 
